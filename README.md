@@ -4,12 +4,12 @@ An AI-powered audio analysis system that detects spoken language and determines 
 
 ## 🌟 Features
 
-✅ **Language Detection** - Identifies spoken language from audio  
-✅ **AI Voice Detection** - Determines if voice is AI-generated or human  
-✅ **Multi-language Support** - English, Hindi, Telugu, Tamil, Malayalam  
-✅ **REST API** - Easy-to-use FastAPI endpoints  
-✅ **No GPU Required** - Runs on CPU (GPU support available)  
-✅ **Production Ready** - Clean code, error handling, validation
+✅ **Language Detection** - Identifies spoken language from audio.  
+✅ **AI Voice Detection** - Determines if voice is AI-generated or human.  
+✅ **Multi-language Support** - English, Hindi, Telugu, Tamil, Malayalam.  
+✅ **REST API** - Easy-to-use FastAPI endpoints.  
+✅ **No GPU Required** - Runs on CPU (GPU support available).  
+✅ **Production Ready** - Clean code, error handling, validation.
 
 ## 📋 Supported Languages
 

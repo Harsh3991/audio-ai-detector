@@ -33,10 +33,10 @@ An AI-powered audio analysis system that detects spoken language and determines 
 - **Well-maintained**: OpenAI model with active community support
 
 **How it works:**
-- Whisper uses an encoder-decoder transformer architecture
-- Processes audio spectrograms to generate text transcriptions
-- Simultaneously detects the language spoken
-- Outputs language code directly from internal language classification
+- Whisper uses an encoder-decoder transformer architecture.
+- Processes audio spectrograms to generate text transcriptions.
+- Simultaneously detects the language spoken.
+- Outputs language code directly from internal language classification.
 
 ### 2. AI Voice Detection: Heuristic-based Placeholder
 

@@ -19,17 +19,17 @@ def check_server():
     try:
         response = requests.get(f"{API_URL}/health/", timeout=5)
         if response.status_code == 200:
-            print("✓ Server is running")
+            print("[OK] Server is running")
             return True
         else:
-            print("✗ Server returned unexpected status")
+            print("[ERROR] Server returned unexpected status")
             return False
     except requests.exceptions.ConnectionError:
-        print("✗ Server is not running")
+        print("[ERROR] Server is not running")
         print("Please start the server first: python backend/main.py")
         return False
     except Exception as e:
-        print(f"✗ Error checking server: {e}")
+        print(f"[ERROR] Error checking server: {e}")
         return False
 
 
@@ -39,7 +39,7 @@ def get_supported_languages():
         response = requests.get(f"{API_URL}/supported-languages/")
         if response.status_code == 200:
             languages = response.json()
-            print("\n📋 Supported Languages:")
+            print("\n[INFO] Supported Languages:")
             for lang in languages:
                 print(f"  - {lang['language_name']} ({lang['language_code']})")
             return True
@@ -57,10 +57,10 @@ def analyze_audio(audio_file_path):
         audio_file_path: Path to audio file
     """
     if not os.path.exists(audio_file_path):
-        print(f"✗ File not found: {audio_file_path}")
+        print(f"[ERROR] File not found: {audio_file_path}")
         return False
     
-    print(f"\n🎵 Analyzing: {os.path.basename(audio_file_path)}")
+    print(f"\n[INFO] Analyzing: {os.path.basename(audio_file_path)}")
     print("Please wait...")
     
     try:
@@ -77,47 +77,47 @@ def analyze_audio(audio_file_path):
             result = response.json()
             
             print("\n" + "="*50)
-            print("📊 ANALYSIS RESULTS")
+            print("ANALYSIS RESULTS")
             print("="*50)
             
             # Language detection
-            print(f"\n🗣️  Language Detected: {result['language_name']} ({result['language_detected']})")
+            print(f"\nLanguage Detected: {result['language_name']} ({result['language_detected']})")
             print(f"   Confidence: {result['language_confidence']:.2%}")
             
             # AI voice detection
-            print(f"\n🤖 AI Voice Detection:")
+            print(f"\nAI Voice Detection:")
             for item in result['ai_voice_result']:
                 label = item['label']
                 score = item['score']
-                bar = "█" * int(score * 20)
+                bar = "#" * int(score * 20)
                 print(f"   {label:5s}: {score:.2%} {bar}")
             
             # Device info
-            print(f"\n⚙️  Processed on: {result['device_used'].upper()}")
+            print(f"\nProcessed on: {result['device_used'].upper()}")
             print("="*50 + "\n")
             
             return True
         
         elif response.status_code == 400:
             error = response.json()
-            print(f"✗ Invalid file: {error.get('detail', 'Unknown error')}")
+            print(f"[ERROR] Invalid file: {error.get('detail', 'Unknown error')}")
             return False
         
         elif response.status_code == 503:
-            print("✗ Server models not loaded yet. Please wait and try again.")
+            print("[ERROR] Server models not loaded yet. Please wait and try again.")
             return False
         
         else:
-            print(f"✗ Server error: {response.status_code}")
+            print(f"[ERROR] Server error: {response.status_code}")
             print(response.text)
             return False
     
     except requests.exceptions.Timeout:
-        print("✗ Request timeout. File may be too large or server is overloaded.")
+        print("[ERROR] Request timeout. File may be too large or server is overloaded.")
         return False
     
     except Exception as e:
-        print(f"✗ Error analyzing audio: {e}")
+        print(f"[ERROR] Error analyzing audio: {e}")
         return False
 
 
@@ -127,7 +127,7 @@ def get_api_info():
         response = requests.get(f"{API_URL}/info/")
         if response.status_code == 200:
             info = response.json()
-            print("\n📚 API Information:")
+            print("\n[INFO] API Information:")
             print(f"  Version: {info['api_version']}")
             print(f"\n  Models:")
             print(f"    Language: {info['models']['language_detection']['model']}")
@@ -142,7 +142,7 @@ def get_api_info():
 def main():
     """Main function."""
     print("="*60)
-    print("🎙️  AI Audio Analyzer - Test Client")
+    print("AI Audio Analyzer - Test Client")
     print("="*60)
     
     # Check if server is running

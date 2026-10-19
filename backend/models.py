@@ -37,7 +37,7 @@ class AudioAnalyzer:
         else:
             self.device = device
         
-        print(f"🔧 Loading models on {self.device.upper()}...")
+        print(f"Loading models on {self.device.upper()}...")
         
         # Language detection model
         self._load_language_model()
@@ -45,7 +45,7 @@ class AudioAnalyzer:
         # AI voice detection model
         self._load_ai_detection_model()
         
-        print("✓ Models loaded successfully!")
+        print("[OK] Models loaded successfully!")
     
     def _load_language_model(self):
         """
@@ -56,7 +56,7 @@ class AudioAnalyzer:
         Size: ~500MB
         """
         print("  Loading Whisper (language detection)...")
-        
+
         model_name = "openai/whisper-small"
         
         self.whisper_processor = WhisperProcessor.from_pretrained(model_name)
@@ -99,17 +99,17 @@ class AudioAnalyzer:
                 self.ast_model.eval()
                 self.ai_detection_available = True
                 self.ai_model_name = model_name
-                print(f"  ✓ Loaded: {model_name}")
+                print(f"  [OK] Loaded: {model_name}")
                 
                 # Debug: Show model's label configuration
                 if hasattr(self.ast_model.config, 'id2label'):
-                    print(f"  📋 Model labels: {self.ast_model.config.id2label}")
+                    print(f"  [INFO] Model labels: {self.ast_model.config.id2label}")
                 else:
-                    print(f"  ⚠ No id2label found, using defaults")
+                    print(f"  [WARN] No id2label found, using defaults")
                 
                 return
             except Exception as e:
-                print(f"  ⚠ Failed: {model_name} - {str(e)}")
+                print(f"  [WARN] Failed: {model_name} - {str(e)}")
                 continue
         
         # If all fail, use feature-based approach
@@ -129,14 +129,14 @@ class AudioAnalyzer:
             import joblib
             self.feature_classifier = joblib.load(model_path)
             self.use_feature_classifier = True
-            print("  ✓ Loaded feature-based classifier")
+            print("  [OK] Loaded feature-based classifier")
         else:
             self.use_feature_classifier = False
-            print("  ⚠ No feature classifier found - using heuristics")
+            print("  [WARN] No feature classifier found - using heuristics")
     
     def detect_language(self, audio: np.ndarray, sr: int) -> Dict:
         """
-        Detect language from audio using Whisper
+        Detect language from audio using Whisper's built-in language detection
         
         Args:
             audio: Audio waveform as numpy array
@@ -159,66 +159,165 @@ class AudioAnalyzer:
             
             input_features = input_features.to(self.device)
             
-            # Generate with forced English tokens to avoid warnings
-            # For language detection, we'll analyze the audio directly
+            # Use Whisper's built-in language detection
+            # Generate with language=None to auto-detect
             with torch.no_grad():
-                # Use generate with language detection
-                generated_ids = self.whisper_model.generate(
-                    input_features,
-                    max_length=448,
-                    task="transcribe"
+                # Force the model to detect language first
+                # We use a very short generation to get the language token
+                forced_decoder_ids = self.whisper_processor.get_decoder_prompt_ids(
+                    language=None, task="transcribe"
                 )
-            
-            # Decode transcription
-            transcription = self.whisper_processor.batch_decode(
-                generated_ids,
-                skip_special_tokens=True
-            )[0]
-            
-            # Detect language from decoder input ids
-            # Whisper encodes language in the first few tokens
-            detected_lang = 'en'  # Default
-            confidence = 0.75  # Default confidence
-            
-            # Try to detect language from generated tokens
-            if len(generated_ids[0]) > 1:
-                # Whisper uses specific tokens for languages
-                # Token 50259 onwards are language tokens
-                # This is a simplified detection
-                lang_token_id = generated_ids[0][1].item() if len(generated_ids[0]) > 1 else None
                 
-                # Map common language token IDs (approximate)
-                lang_token_map = {
-                    50259: 'en',  # <|en|>
-                    50276: 'hi',  # <|hi|>
-                    50287: 'ta',  # <|ta|>
-                    50289: 'te',  # <|te|>
-                    50269: 'ml',  # <|ml|>
-                }
+                # Detect language using the model's forward pass
+                # Whisper stores language in the first token
+                outputs = self.whisper_model.generate(
+                    input_features,
+                    max_new_tokens=1,  # Only need first token for language
+                    language=None,  # Auto-detect
+                    task="transcribe",
+                    return_dict_in_generate=True,
+                    output_scores=True
+                )
                 
-                if lang_token_id in lang_token_map:
-                    detected_lang = lang_token_map[lang_token_id]
-                    confidence = 0.85
-            
-            # Fallback: simple heuristic based on transcription
-            # Check for language-specific characters
-            if any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in transcription):
-                detected_lang = 'hi'  # Devanagari script
-            elif any(ord(c) >= 0x0B80 and ord(c) <= 0x0BFF for c in transcription):
-                detected_lang = 'ta'  # Tamil script
-            elif any(ord(c) >= 0x0C00 and ord(c) <= 0x0C7F for c in transcription):
-                detected_lang = 'te'  # Telugu script
-            elif any(ord(c) >= 0x0D00 and ord(c) <= 0x0D7F for c in transcription):
-                detected_lang = 'ml'  # Malayalam script
+                # Get the first generated token
+                first_token = outputs.sequences[0][1].item()
+                
+                # Whisper's language tokens are specific IDs
+                # The processor can tell us which language this corresponds to
+                # We'll use the tokenizer to decode
+                
+                # Alternative: Use Whisper's detect_language method if available
+                # This is the more reliable approach
+                try:
+                    # Whisper model has a detect_language method
+                    # It returns (language_token, language_probability)
+                    detection_result = self.whisper_model.detect_language(input_features)
+
+                    # Handle different return formats from different Whisper versions
+                    if isinstance(detection_result, tuple) and len(detection_result) == 2:
+                        language_token, language_prob = detection_result
+                    else:
+                        # Newer versions might return a dict or different format
+                        print(f"  [DEBUG] Unexpected detect_language format: {type(detection_result)}")
+                        raise ValueError("Unexpected detect_language return format")
+                    
+                    # Convert token to language code
+                    # Whisper uses specific language codes
+                    language_code_map = {
+                        'en': 'en',
+                        'english': 'en',
+                        'hi': 'hi',
+                        'hindi': 'hi',
+                        'te': 'te',
+                        'telugu': 'te',
+                        'ta': 'ta',
+                        'tamil': 'ta',
+                        'ml': 'ml',
+                        'malayalam': 'ml'
+                    }
+
+                    # Get language from processor's token dictionary
+                    detected_lang_code = self.whisper_processor.decode([language_token.item()])
+
+                    # Clean up the detected language (remove special tokens)
+                    detected_lang_code = detected_lang_code.strip().lower()
+
+                    # Debug logging
+                    print(f"  [DEBUG] Raw detected language token: '{detected_lang_code}'")
+                    print(f"  [DEBUG] Language token ID: {language_token.item()}")
+                    print(f"  [DEBUG] Language probability: {confidence:.4f}")
+
+                    # Map to our supported languages
+                    if detected_lang_code in language_code_map:
+                        detected_lang = language_code_map[detected_lang_code]
+                    else:
+                        # Try to match partial - better matching for Indian languages
+                        detected_lang = 'en'  # Default
+                        for key, value in language_code_map.items():
+                            if detected_lang_code.startswith(key[:2]) or key.startswith(detected_lang_code[:2]):
+                                detected_lang = value
+                                print(f"  [DEBUG] Matched '{detected_lang_code}' to '{detected_lang}' via partial match")
+                                break
+                        else:
+                            print(f"  [DEBUG] No match found for '{detected_lang_code}', defaulting to English")
+                    
+                    confidence = float(language_prob.item())
+                    
+                except Exception as e:
+                    print(f"Using fallback language detection: {e}")
+                    # Fallback: Generate short transcription and detect from text
+                    generated_ids = self.whisper_model.generate(
+                        input_features,
+                        max_length=50,
+                        language=None,
+                        task="transcribe"
+                    )
+
+                    transcription = self.whisper_processor.batch_decode(
+                        generated_ids,
+                        skip_special_tokens=True
+                    )[0]
+
+                    print(f"  [DEBUG] Fallback transcription: '{transcription[:50]}...'")
+
+                    # Simple heuristic based on transcription content
+                    detected_lang = 'en'  # Default
+                    confidence = 0.60
+
+                    # Check for language-specific characters in transcription
+                    if any(ord(c) >= 0x0900 and ord(c) <= 0x097F for c in transcription):
+                        detected_lang = 'hi'  # Devanagari script
+                        confidence = 0.85
+                    elif any(ord(c) >= 0x0B80 and ord(c) <= 0x0BFF for c in transcription):
+                        detected_lang = 'ta'  # Tamil script
+                        confidence = 0.85
+                    elif any(ord(c) >= 0x0C00 and ord(c) <= 0x0C7F for c in transcription):
+                        detected_lang = 'te'  # Telugu script
+                        confidence = 0.85
+                    elif any(ord(c) >= 0x0D00 and ord(c) <= 0x0D7F for c in transcription):
+                        detected_lang = 'ml'  # Malayalam script
+                        confidence = 0.85
+
+                    print(f"  [DEBUG] Fallback detected language: {detected_lang}")
+
+                    # Special handling for Telugu: Whisper often transcribes Telugu as Hindi
+                    # If detected as Hindi, try transcribing with Telugu forced to check
+                    if detected_lang == 'hi':
+                        print(f"  [DEBUG] Detected Hindi, checking if it might be Telugu...")
+                        try:
+                            # Try forcing Telugu transcription
+                            telugu_ids = self.whisper_model.generate(
+                                input_features,
+                                max_length=50,
+                                language='te',
+                                task="transcribe"
+                            )
+                            telugu_transcription = self.whisper_processor.batch_decode(
+                                telugu_ids,
+                                skip_special_tokens=True
+                            )[0]
+
+                            print(f"  [DEBUG] Telugu-forced transcription: '{telugu_transcription[:50]}...'")
+
+                            # Check if Telugu transcription produces Telugu script (0x0C00-0x0C7F)
+                            has_telugu_chars = any(ord(c) >= 0x0C00 and ord(c) <= 0x0C7F for c in telugu_transcription)
+
+                            if has_telugu_chars:
+                                print(f"  [DEBUG] Telugu characters found, switching to Telugu")
+                                detected_lang = 'te'
+                                confidence = 0.80
+                        except Exception as te:
+                            print(f"  [DEBUG] Telugu check failed: {te}")
             
             # Ensure valid language
             if detected_lang not in self.supported_languages:
                 detected_lang = 'en'
+                confidence = confidence * 0.7  # Reduce confidence for fallback
             
             return {
                 'language_code': detected_lang,
                 'language_name': self.supported_languages[detected_lang],
-                'confidence': confidence
+                'confidence': min(confidence, 0.99)  # Cap at 99%
             }
             
         except Exception as e:
@@ -279,27 +378,26 @@ class AudioAnalyzer:
             # Map to labels based on model configuration
             if hasattr(self.ast_model.config, 'id2label'):
                 label_map = self.ast_model.config.id2label
-                print(f"  🔍 Using model labels: {label_map}")
+                print(f"  [INFO] Using model labels: {label_map}")
             else:
                 # Default assumption: Many ASVspoof models use [spoof, bonafide]
                 label_map = {0: 'spoof', 1: 'bonafide'}
-                print(f"  🔍 Using default labels: {label_map}")
+                print(f"  [INFO] Using default labels: {label_map}")
             
             results = []
             for idx, score in enumerate(probs):
                 label = label_map.get(idx, f'class_{idx}')
-                # INVERTED: Model's 'bonafide' actually predicts AI, 'spoof' predicts REAL
-                # This is specific to how this model was trained
+                # Correct mapping: Bonafide = REAL, Spoof = AI
                 if any(keyword in label.lower() for keyword in ['bonafide', 'real', 'human', 'genuine']):
-                    normalized_label = 'AI'  # Swapped
+                    normalized_label = 'REAL'
                 elif any(keyword in label.lower() for keyword in ['spoof', 'fake', 'ai', 'synthetic']):
-                    normalized_label = 'REAL'  # Swapped
+                    normalized_label = 'AI'
                 else:
-                    # Unknown label, swap the index order
-                    normalized_label = 'AI' if idx == 1 else 'REAL'
-                
+                    # Unknown label, use default mapping
+                    normalized_label = 'REAL' if idx == 0 else 'AI'
+
                 print(f"    Index {idx}: {label} -> {normalized_label} (score: {score:.4f})")
-                
+
                 results.append({
                     'label': normalized_label,
                     'score': round(float(score), 4)  # Round to 4 decimal places

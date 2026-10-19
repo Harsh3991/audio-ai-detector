@@ -60,9 +60,9 @@ async def startup_event():
     
     try:
         analyzer = AudioAnalyzer()
-        print("✓ Models loaded successfully!")
+        print("[OK] Models loaded successfully!")
     except Exception as e:
-        print(f"✗ Failed to load models: {str(e)}")
+        print(f"[ERROR] Failed to load models: {str(e)}")
         print("Server will start but /analyze-audio/ endpoint will fail")
 
 
